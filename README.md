@@ -11,9 +11,22 @@ A wrapper for Tracekit
 
  - example:
 ```
-    if (TracekitConfig) {
-        TracekitConfig.setUrl('http://tracekit-dev.sandbox01.jarv.us/api/catch');
-    }
+if (TracekitConfig) {
+    TracekitConfig.setUrl('http://tracekit-dev.sandbox01.jarv.us/api/catch');
+}
 ```
-    
+## Error reporting
+
+```
+// errors that occur in try blocks have full stack information
+try {
+    //non_existent_function();
+} catch (e) {
+    //error with stack trace gets normalized and sent to subscriber
+    TraceKit.report(e);
+}
+
+// errors outside of try blocks do not have full stack info
+non_existent_function();
+```
     
