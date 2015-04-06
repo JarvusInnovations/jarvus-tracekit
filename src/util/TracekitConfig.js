@@ -1,5 +1,21 @@
 /**
  * Utility for configuring Tracekit
+ *
+ *    // Configure with a url which will receive error reports
+ *    if (TracekitConfig) {
+ *        TracekitConfig.setUrl('http://tracekit-dev.sandbox01.jarv.us/api/catch');
+ *    }
+ *
+ *    // errors that occur in try blocks have full stack information
+ *    try {
+ *        //non_existent_function();
+ *    } catch (e) {
+ *        //error with stack trace gets normalized and sent to subscriber
+ *        TraceKit.report(e);
+ *    }
+ *
+ *    // errors outside of try blocks do not have full stack info
+ *    non_existent_function();
  */
 Ext.define('Jarvus.util.TracekitConfig', {
     alternateClassName: 'TracekitConfig',
@@ -11,44 +27,17 @@ Ext.define('Jarvus.util.TracekitConfig', {
 
     constructor: function() {
         var me = this;
-        console.log('singleton constructor');
-        console.log(this.report);
-        console.log(this.getUrl());
-        //TraceKit.report.subscribe(this.report);
+
         TraceKit.report.subscribe(function(errorReport) {
-            console.log(errorReport);
             Ext.Ajax.request({
                 url: me.getUrl(),
-            //    url: 'http://jarvus.dev.local/tracekit/tracekit-server/catch.php',
                 params: {
                     error: JSON.stringify(errorReport)
                 },
                 success: function(response){
-                    var text = response.responseText;
                     // process server response here
                 }
             });
-        });
-    },
-
-    report: function(errorReport) {
-
-        if (this.getUrl()===null) {
-            console.warn('Jarvus.util.Tracekit: You must set a URL');
-        }
-
-        //send via ajax to server, or use console.error in development
-        //to get you started see: https://gist.github.com/4491219
-        Ext.Ajax.request({
-        //    url: this.getUrl(),
-            url: 'http://jarvus.dev.local/tracekit/tracekit-server/catch.php',
-            params: {
-                error: JSON.stringify(errorReport)
-            },
-            success: function(response){
-                var text = response.responseText;
-                // process server response here
-            }
         });
     }
 });
