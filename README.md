@@ -12,7 +12,7 @@ A wrapper for Tracekit
  - example:
 ```
 if (TracekitConfig) {
-    TracekitConfig.setUrl('http://tracekit-dev.sandbox01.jarv.us/api/catch');
+    TracekitConfig.setUrl('http://my.domain.com/catch.php');
 }
 ```
 ## Error reporting
