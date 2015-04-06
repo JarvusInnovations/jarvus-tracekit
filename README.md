@@ -10,9 +10,10 @@ A wrapper for Tracekit
 ## Configuration
 
  - example:
- 
+```
     if (TracekitConfig) {
         TracekitConfig.setUrl('http://tracekit-dev.sandbox01.jarv.us/api/catch');
     }
+```
     
     
