@@ -22,7 +22,9 @@ Ext.define('Jarvus.util.TracekitConfig', {
     singleton: true,
 
     config: {
-        url: null
+        url: null,
+        appName: null,
+        suppressError: true
     },
 
     constructor: function() {
@@ -32,12 +34,14 @@ Ext.define('Jarvus.util.TracekitConfig', {
             Ext.Ajax.request({
                 url: me.getUrl(),
                 params: {
+                    app_name: me.getAppName(),
                     error: JSON.stringify(errorReport)
                 },
                 success: function(response){
                     // process server response here
                 }
             });
+            return me.getSuppressError; //suppress error on client
         });
     }
 });
