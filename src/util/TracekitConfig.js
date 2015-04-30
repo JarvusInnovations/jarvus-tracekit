@@ -23,25 +23,36 @@ Ext.define('Jarvus.util.TracekitConfig', {
 
     config: {
         url: null,
-        appName: null,
-        suppressError: true
+        appName: null
     },
 
     constructor: function() {
         var me = this;
 
-        TraceKit.report.subscribe(function(errorReport) {
-            Ext.Ajax.request({
-                url: me.getUrl(),
-                params: {
-                    app_name: me.getAppName(),
-                    error: JSON.stringify(errorReport)
-                },
-                success: function(response){
-                    // process server response here
-                }
-            });
-            return me.getSuppressError; //suppress error on client
+        if (TraceKit)
+        {
+            TraceKit.report.subscribe(Ext.bind(me.sendReport,me));
+        }
+        else
+        {
+            console.warn('TraceKit library was not found.  Tracekit was not configured.');
+        }
+
+    },
+
+    sendReport: function(errorReport)
+    {
+        var me = this;
+
+        Ext.Ajax.request({
+            url: me.getUrl(),
+            params: {
+                app_name: me.getAppName(),
+                error: JSON.stringify(errorReport)
+            },
+            success: function(response){
+            }
         });
     }
+
 });
