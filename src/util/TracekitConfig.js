@@ -29,7 +29,7 @@ Ext.define('Jarvus.util.TracekitConfig', {
     constructor: function() {
         var me = this;
 
-        if (TraceKit)
+        if (window.TraceKit)
         {
             TraceKit.report.subscribe(Ext.bind(me.sendReport,me));
         }
