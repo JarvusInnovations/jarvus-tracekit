@@ -1,10 +1,13 @@
-/*
- TraceKit - Cross brower stack traces - github.com/occ/TraceKit
- MIT license
-*/
-
-;(function(window, undefined) {
-
+/**
+ * https://github.com/csnover/TraceKit
+ * @license MIT
+ * @namespace TraceKit
+ * version: https://github.com/csnover/TraceKit/commit/e5fbdb5bfd56dc9803f29bccc2dd43b59f3dbcb2
+ */
+(function(window, undefined) {
+if (!window) {
+    return;
+}
 
 var TraceKit = {};
 var _oldTraceKit = window.TraceKit;
@@ -13,25 +16,34 @@ var _oldTraceKit = window.TraceKit;
 var _slice = [].slice;
 var UNKNOWN_FUNCTION = '?';
 
-
 /**
- * _has, a better form of hasOwnProperty
- * Example: _has(MainHostObject, property) === true/false
+ * A better form of hasOwnProperty<br/>
+ * Example: `_has(MainHostObject, property) === true/false`
  *
- * @param {Object} host object to check property
+ * @param {Object} object to check property
  * @param {string} key to check
+ * @return {Boolean} true if the object has the key and it is not inherited
  */
 function _has(object, key) {
     return Object.prototype.hasOwnProperty.call(object, key);
 }
 
+/**
+ * Returns true if the parameter is undefined<br/>
+ * Example: `_isUndefined(val) === true/false`
+ *
+ * @param {*} what Value to check
+ * @return {Boolean} true if undefined and false otherwise
+ */
 function _isUndefined(what) {
     return typeof what === 'undefined';
 }
 
 /**
- * TraceKit.noConflict: Export TraceKit out to another variable
- * Example: var TK = TraceKit.noConflict()
+ * Export TraceKit out to another variable<br/>
+ * Example: `var TK = TraceKit.noConflict()`
+ * @return {Object} The TraceKit object
+ * @memberof TraceKit
  */
 TraceKit.noConflict = function noConflict() {
     window.TraceKit = _oldTraceKit;
@@ -39,11 +51,12 @@ TraceKit.noConflict = function noConflict() {
 };
 
 /**
- * TraceKit.wrap: Wrap any function in a TraceKit reporter
- * Example: func = TraceKit.wrap(func);
+ * Wrap any function in a TraceKit reporter<br/>
+ * Example: `func = TraceKit.wrap(func);`
  *
  * @param {Function} func Function to be wrapped
  * @return {Function} The wrapped func
+ * @memberof TraceKit
  */
 TraceKit.wrap = function traceKitWrapper(func) {
     function wrapped() {
@@ -58,23 +71,25 @@ TraceKit.wrap = function traceKitWrapper(func) {
 };
 
 /**
- * TraceKit.report: cross-browser processing of unhandled exceptions
+ * Cross-browser processing of unhandled exceptions
  *
  * Syntax:
+ * ```js
  *   TraceKit.report.subscribe(function(stackInfo) { ... })
  *   TraceKit.report.unsubscribe(function(stackInfo) { ... })
  *   TraceKit.report(exception)
  *   try { ...code... } catch(ex) { TraceKit.report(ex); }
+ * ```
  *
  * Supports:
  *   - Firefox: full stack trace with line numbers, plus column number
- *              on top frame; column number is not guaranteed
- *   - Opera:   full stack trace with line and column numbers
- *   - Chrome:  full stack trace with line and column numbers
- *   - Safari:  line and column number for the top frame only; some frames
- *              may be missing, and column number is not guaranteed
- *   - IE:      line and column number for the top frame only; some frames
- *              may be missing, and column number is not guaranteed
+ *     on top frame; column number is not guaranteed
+ *   - Opera: full stack trace with line and column numbers
+ *   - Chrome: full stack trace with line and column numbers
+ *   - Safari: line and column number for the top frame only; some frames
+ *     may be missing, and column number is not guaranteed
+ *   - IE: line and column number for the top frame only; some frames
+ *     may be missing, and column number is not guaranteed
  *
  * In theory, TraceKit should work on all of the following versions:
  *   - IE5.5+ (only 8.0 tested)
@@ -93,25 +108,32 @@ TraceKit.wrap = function traceKitWrapper(func) {
  * If the exception does not reach the top of the browser, you will only
  * get a stack trace from the point where TraceKit.report was called.
  *
- * Handlers receive a stackInfo object as described in the
+ * Handlers receive a TraceKit.StackTrace object as described in the
  * TraceKit.computeStackTrace docs.
+ *
+ * @memberof TraceKit
+ * @namespace
  */
 TraceKit.report = (function reportModuleWrapper() {
     var handlers = [],
+        lastArgs = null,
         lastException = null,
         lastExceptionStack = null;
 
     /**
      * Add a crash handler.
      * @param {Function} handler
+     * @memberof TraceKit.report
      */
     function subscribe(handler) {
+        installGlobalHandler();
         handlers.push(handler);
     }
 
     /**
      * Remove a crash handler.
      * @param {Function} handler
+     * @memberof TraceKit.report
      */
     function unsubscribe(handler) {
         for (var i = handlers.length - 1; i >= 0; --i) {
@@ -123,11 +145,14 @@ TraceKit.report = (function reportModuleWrapper() {
 
     /**
      * Dispatch stack information to all handlers.
-     * @param {Object.<string, *>} stack
+     * @param {TraceKit.StackTrace} stack
+     * @param {boolean} isWindowError Is this a top-level window error?
+     * @memberof TraceKit.report
+     * @throws An exception if an error occurs while calling an handler.
      */
-    function notifyHandlers(stack, windowError) {
+    function notifyHandlers(stack, isWindowError) {
         var exception = null;
-        if (windowError && !TraceKit.collectWindowErrors) {
+        if (isWindowError && !TraceKit.collectWindowErrors) {
           return;
         }
         for (var i in handlers) {
@@ -145,76 +170,96 @@ TraceKit.report = (function reportModuleWrapper() {
         }
     }
 
-    var _oldOnerrorHandler = window.onerror;
+    var _oldOnerrorHandler, _onErrorHandlerInstalled;
 
     /**
      * Ensures all global unhandled exceptions are recorded.
      * Supported by Gecko and IE.
      * @param {string} message Error message.
      * @param {string} url URL of script that generated the exception.
-     * @param {(number|string)} lineNo The line number at which the error
-     * occurred.
+     * @param {(number|string)} lineNo The line number at which the error occurred.
+     * @param {(number|string)=} columnNo The column number at which the error occurred.
+     * @param {Error=} errorObj The actual Error object.
+     * @memberof TraceKit.report
      */
-    window.onerror = function traceKitWindowOnError(message, url, lineNo) {
+    function traceKitWindowOnError(message, url, lineNo, columnNo, errorObj) {
         var stack = null;
 
         if (lastExceptionStack) {
             TraceKit.computeStackTrace.augmentStackTraceWithInitialElement(lastExceptionStack, url, lineNo, message);
-            stack = lastExceptionStack;
-            lastExceptionStack = null;
-            lastException = null;
+            processLastException();
+        } else if (errorObj) {
+            stack = TraceKit.computeStackTrace(errorObj);
+            notifyHandlers(stack, true);
         } else {
             var location = {
-                'url': url,
-                'line': lineNo
+              'url': url,
+              'line': lineNo,
+              'column': columnNo
             };
             location.func = TraceKit.computeStackTrace.guessFunctionName(location.url, location.line);
             location.context = TraceKit.computeStackTrace.gatherContext(location.url, location.line);
             stack = {
-                'mode': 'onerror',
-                'message': message,
-                'url': document.location.href,
-                'stack': [location],
-                'useragent': navigator.userAgent
+              'mode': 'onerror',
+              'message': message,
+              'stack': [location]
             };
+
+            notifyHandlers(stack, true);
         }
 
         if (_oldOnerrorHandler) {
-            var _oldOnerrorReturn = _oldOnerrorHandler.apply(this, arguments);
-
-            // if there is a return value and that return value has notifyTraceKitHandlers set to false, don't notifyHandlers.
-            if (_oldOnerrorReturn && _oldOnerrorReturn.notifyTraceKitHandlers === false) {
-            } else { // else, always always notifyHandlers
-                notifyHandlers(stack, 'from window.onerror');
-            }
-            return _oldOnerrorReturn; // preserve any potential return behavior of the old onerror function.
-        } else {
-            notifyHandlers(stack, 'from window.onerror');
+            return _oldOnerrorHandler.apply(this, arguments);
         }
 
         return false;
-    };
+    }
+
+    /**
+     * Install a global onerror handler
+     * @memberof TraceKit.report
+     */
+    function installGlobalHandler () {
+        if (_onErrorHandlerInstalled === true) {
+            return;
+        }
+        _oldOnerrorHandler = window.onerror;
+        window.onerror = traceKitWindowOnError;
+        _onErrorHandlerInstalled = true;
+    }
+
+    /**
+     * Process the most recent exception
+     * @memberof TraceKit.report
+     */
+    function processLastException() {
+        var _lastExceptionStack = lastExceptionStack,
+            _lastArgs = lastArgs;
+        lastArgs = null;
+        lastExceptionStack = null;
+        lastException = null;
+        notifyHandlers.apply(null, [_lastExceptionStack, false].concat(_lastArgs));
+    }
 
     /**
      * Reports an unhandled Error to TraceKit.
      * @param {Error} ex
+     * @memberof TraceKit.report
+     * @throws An exception if an incomplete stack trace is detected (old IE browsers).
      */
     function report(ex) {
-        var args = _slice.call(arguments, 1);
         if (lastExceptionStack) {
             if (lastException === ex) {
                 return; // already caught by an inner catch block, ignore
             } else {
-                var s = lastExceptionStack;
-                lastExceptionStack = null;
-                lastException = null;
-                notifyHandlers.apply(null, [s, null].concat(args));
+              processLastException();
             }
         }
 
         var stack = TraceKit.computeStackTrace(ex);
         lastExceptionStack = stack;
         lastException = ex;
+        lastArgs = _slice.call(arguments, 1);
 
         // If the stack trace is incomplete, wait for 2 seconds for
         // slow slow IE to see if onerror occurs or not before reporting
@@ -222,9 +267,7 @@ TraceKit.report = (function reportModuleWrapper() {
         // stack trace
         window.setTimeout(function () {
             if (lastException === ex) {
-                lastExceptionStack = null;
-                lastException = null;
-                notifyHandlers.apply(null, [stack, null].concat(args));
+                processLastException();
             }
         }, (stack.incomplete ? 2000 : 0));
 
@@ -237,21 +280,35 @@ TraceKit.report = (function reportModuleWrapper() {
 }());
 
 /**
+ * An object representing a single stack frame.
+ * @typedef {Object} StackFrame
+ * @property {string} url The JavaScript or HTML file URL.
+ * @property {string} func The function name, or empty for anonymous functions (if guessing did not work).
+ * @property {string[]=} args The arguments passed to the function, if known.
+ * @property {number=} line The line number, if known.
+ * @property {number=} column The column number, if known.
+ * @property {string[]} context An array of source code lines; the middle element corresponds to the correct line#.
+ * @memberof TraceKit
+ */
+
+/**
+ * An object representing a JavaScript stack trace.
+ * @typedef {Object} StackTrace
+ * @property {string} name The name of the thrown exception.
+ * @property {string} message The exception error message.
+ * @property {TraceKit.StackFrame[]} stack An array of stack frames.
+ * @property {string} mode 'stack', 'stacktrace', 'multiline', 'callers', 'onerror', or 'failed' -- method used to collect the stack trace.
+ * @memberof TraceKit
+ */
+
+/**
  * TraceKit.computeStackTrace: cross-browser stack traces in JavaScript
  *
  * Syntax:
+ *   ```js
  *   s = TraceKit.computeStackTrace.ofCaller([depth])
  *   s = TraceKit.computeStackTrace(exception) // consider using TraceKit.report instead (see below)
- * Returns:
- *   s.name              - exception name
- *   s.message           - exception message
- *   s.stack[i].url      - JavaScript or HTML file URL
- *   s.stack[i].func     - function name, or empty for anonymous functions (if guessing did not work)
- *   s.stack[i].args     - arguments passed to the function, if known
- *   s.stack[i].line     - line number, if known
- *   s.stack[i].column   - column number, if known
- *   s.stack[i].context  - an array of source code lines; the middle element corresponds to the correct line#
- *   s.mode              - 'stack', 'stacktrace', 'multiline', 'callers', 'onerror', or 'failed' -- method used to collect the stack trace
+ *   ```
  *
  * Supports:
  *   - Firefox:  full stack trace with line numbers and unreliable column
@@ -290,6 +347,7 @@ TraceKit.report = (function reportModuleWrapper() {
  * inner function that actually caused the exception).
  *
  * Tracing example:
+ *  ```js
  *     function trace(message) {
  *         var stackInfo = TraceKit.computeStackTrace.ofCaller();
  *         var data = message + "\n";
@@ -302,6 +360,9 @@ TraceKit.report = (function reportModuleWrapper() {
  *         else
  *             alert(data);
  *     }
+ * ```
+ * @memberof TraceKit
+ * @namespace
  */
 TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
     var debug = false,
@@ -312,20 +373,21 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * to look up anonymous function names.
      * @param {string} url URL of source code.
      * @return {string} Source contents.
+     * @memberof TraceKit.computeStackTrace
      */
     function loadSource(url) {
         if (!TraceKit.remoteFetching) { //Only attempt request if remoteFetching is on.
             return '';
         }
         try {
-            function getXHR() {
+            var getXHR = function() {
                 try {
                     return new window.XMLHttpRequest();
                 } catch (e) {
                     // explicitly bubble up the exception if not found
                     return new window.ActiveXObject('Microsoft.XMLHTTP');
                 }
-            }
+            };
 
             var request = getXHR();
             request.open('GET', url, false);
@@ -340,13 +402,21 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * Retrieves source code from the source code cache.
      * @param {string} url URL of source code.
      * @return {Array.<string>} Source contents.
+     * @memberof TraceKit.computeStackTrace
      */
     function getSource(url) {
+        if (typeof url !== 'string') {
+            return [];
+        }
+
         if (!_has(sourceCache, url)) {
             // URL needs to be able to fetched within the acceptable domain.  Otherwise,
             // cross-domain errors will be triggered.
             var source = '';
-            if (url.indexOf(document.domain) !== -1) {
+            var domain = '';
+            try { domain = document.domain; } catch (e) {}
+            var match = /(.*)\:\/\/([^\/]+)\/{0,1}([\s\S]*)/.exec(url);
+            if (match && match[2] === domain) {
                 source = loadSource(url);
             }
             sourceCache[url] = source ? source.split('\n') : [];
@@ -362,6 +432,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * @param {string} url URL of source code.
      * @param {(string|number)} lineNo Line number in source code.
      * @return {string} The function name, if discoverable.
+     * @memberof TraceKit.computeStackTrace
      */
     function guessFunctionName(url, lineNo) {
         var reFunctionArgNames = /function ([^(]*)\(([^)]*)\)/,
@@ -398,6 +469,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * @param {(string|number)} line Line number in source code to centre
      * around for context.
      * @return {?Array.<string>} Lines of source code.
+     * @memberof TraceKit.computeStackTrace
      */
     function gatherContext(url, line) {
         var source = getSource(url);
@@ -432,6 +504,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * used inside a regular expression as a string literal.
      * @param {string} text The string.
      * @return {string} The escaped string literal.
+     * @memberof TraceKit.computeStackTrace
      */
     function escapeRegExp(text) {
         return text.replace(/[\-\[\]{}()*+?.,\\\^$|#]/g, '\\$&');
@@ -443,6 +516,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * be matched the same as their literal friends.
      * @param {string} body The string.
      * @return {string} The escaped string.
+     * @memberof TraceKit.computeStackTrace
      */
     function escapeCodeAsRegExpForMatchingInsideHTML(body) {
         return escapeRegExp(body).replace('<', '(?:<|&lt;)').replace('>', '(?:>|&gt;)').replace('&', '(?:&|&amp;)').replace('"', '(?:"|&quot;)').replace(/\s+/g, '\\s+');
@@ -454,6 +528,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * @param {Array.<string>} urls A list of URLs to search.
      * @return {?Object.<string, (string|number)>} An object containing
      * the url, line, and column number of the defined function.
+     * @memberof TraceKit.computeStackTrace
      */
     function findSourceInUrls(re, urls) {
         var source, m;
@@ -485,6 +560,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * @param {string} url The URL to search.
      * @param {(string|number)} line The line number to examine.
      * @return {?number} The column number.
+     * @memberof TraceKit.computeStackTrace
      */
     function findSourceInLine(fragment, url, line) {
         var source = getSource(url),
@@ -506,8 +582,13 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * function definition.
      * @return {?Object.<string, (string|number)>} An object containing
      * the url, line, and column number of the defined function.
+     * @memberof TraceKit.computeStackTrace
      */
     function findSourceByFunctionBody(func) {
+        if (_isUndefined(document)) {
+            return;
+        }
+
         var urls = [window.location.href],
             scripts = document.getElementsByTagName('script'),
             body,
@@ -583,6 +664,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
     // ex.message = qq is not defined
     // ex.fileName = http://...
     // ex.lineNumber = 59
+    // ex.columnNumber = 69
     // ex.stack = ...stack trace... (see the example below)
     // ex.name = ReferenceError
     //
@@ -607,15 +689,17 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * Computes stack trace information from the stack property.
      * Chrome and Gecko use this property.
      * @param {Error} ex
-     * @return {?Object.<string, *>} Stack trace information.
+     * @return {?TraceKit.StackTrace} Stack trace information.
+     * @memberof TraceKit.computeStackTrace
      */
     function computeStackTraceFromStackProp(ex) {
         if (!ex.stack) {
             return null;
         }
 
-        var chrome = /^\s*at (?:((?:\[object object\])?\S+) )?\(?((?:file|http|https):.*?):(\d+)(?::(\d+))?\)?\s*$/i,
-            gecko = /^\s*(\S*)(?:\((.*?)\))?@((?:file|http|https).*?):(\d+)(?::(\d+))?\s*$/i,
+        var chrome = /^\s*at (.*?) ?\(((?:file|https?|blob|chrome-extension|native|eval).*?)(?::(\d+))?(?::(\d+))?\)?\s*$/i,
+            gecko = /^\s*(.*?)(?:\((.*?)\))?(?:^|@)((?:file|https?|blob|chrome|\[).*?)(?::(\d+))?(?::(\d+))?\s*$/i,
+            winjs = /^\s*at (?:((?:\[object object\])?.+) )?\(?((?:ms-appx|https?|blob):.*?):(\d+)(?::(\d+))?\)?\s*$/i,
             lines = ex.stack.split('\n'),
             stack = [],
             parts,
@@ -623,20 +707,30 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             reference = /^(.*) is undefined$/.exec(ex.message);
 
         for (var i = 0, j = lines.length; i < j; ++i) {
-            if ((parts = gecko.exec(lines[i]))) {
+            if ((parts = chrome.exec(lines[i]))) {
+                var isNative = parts[2] && parts[2].indexOf('native') !== -1;
                 element = {
-                    'url': parts[3],
+                    'url': !isNative ? parts[2] : null,
                     'func': parts[1] || UNKNOWN_FUNCTION,
-                    'args': parts[2] ? parts[2].split(',') : '',
-                    'line': +parts[4],
-                    'column': parts[5] ? +parts[5] : null
+                    'args': isNative ? [parts[2]] : [],
+                    'line': parts[3] ? +parts[3] : null,
+                    'column': parts[4] ? +parts[4] : null
                 };
-            } else if ((parts = chrome.exec(lines[i]))) {
+            } else if ( parts = winjs.exec(lines[i]) ) {
                 element = {
                     'url': parts[2],
                     'func': parts[1] || UNKNOWN_FUNCTION,
+                    'args': [],
                     'line': +parts[3],
                     'column': parts[4] ? +parts[4] : null
+                };
+            } else if ((parts = gecko.exec(lines[i]))) {
+                element = {
+                    'url': parts[3],
+                    'func': parts[1] || UNKNOWN_FUNCTION,
+                    'args': parts[2] ? parts[2].split(',') : [],
+                    'line': parts[4] ? +parts[4] : null,
+                    'column': parts[5] ? +parts[5] : null
                 };
             } else {
                 continue;
@@ -653,51 +747,70 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             stack.push(element);
         }
 
-        if (stack[0] && stack[0].line && !stack[0].column && reference) {
-            stack[0].column = findSourceInLine(reference[1], stack[0].url, stack[0].line);
-        }
-
         if (!stack.length) {
             return null;
+        }
+
+        if (stack[0] && stack[0].line && !stack[0].column && reference) {
+            stack[0].column = findSourceInLine(reference[1], stack[0].url, stack[0].line);
+        } else if (!stack[0].column && !_isUndefined(ex.columnNumber)) {
+            // FireFox uses this awesome columnNumber property for its top frame
+            // Also note, Firefox's column number is 0-based and everything else expects 1-based,
+            // so adding 1
+            stack[0].column = ex.columnNumber + 1;
         }
 
         return {
             'mode': 'stack',
             'name': ex.name,
             'message': ex.message,
-            'url': document.location.href,
-            'stack': stack,
-            'useragent': navigator.userAgent
+            'stack': stack
         };
     }
 
     /**
      * Computes stack trace information from the stacktrace property.
-     * Opera 10 uses this property.
+     * Opera 10+ uses this property.
      * @param {Error} ex
-     * @return {?Object.<string, *>} Stack trace information.
+     * @return {?TraceKit.StackTrace} Stack trace information.
+     * @memberof TraceKit.computeStackTrace
      */
     function computeStackTraceFromStacktraceProp(ex) {
         // Access and store the stacktrace property before doing ANYTHING
         // else to it because Opera is not very good at providing it
         // reliably in other circumstances.
         var stacktrace = ex.stacktrace;
+        if (!stacktrace) {
+            return;
+        }
 
-        var testRE = / line (\d+), column (\d+) in (?:<anonymous function: ([^>]+)>|([^\)]+))\((.*)\) in (.*):\s*$/i,
+        var opera10Regex = / line (\d+).*script (?:in )?(\S+)(?:: in function (\S+))?$/i,
+            opera11Regex = / line (\d+), column (\d+)\s*(?:in (?:<anonymous function: ([^>]+)>|([^\)]+))\((.*)\))? in (.*):\s*$/i,
             lines = stacktrace.split('\n'),
             stack = [],
             parts;
 
-        for (var i = 0, j = lines.length; i < j; i += 2) {
-            if ((parts = testRE.exec(lines[i]))) {
-                var element = {
+        for (var line = 0; line < lines.length; line += 2) {
+            var element = null;
+            if ((parts = opera10Regex.exec(lines[line]))) {
+                element = {
+                    'url': parts[2],
+                    'line': +parts[1],
+                    'column': null,
+                    'func': parts[3],
+                    'args':[]
+                };
+            } else if ((parts = opera11Regex.exec(lines[line]))) {
+                element = {
+                    'url': parts[6],
                     'line': +parts[1],
                     'column': +parts[2],
                     'func': parts[3] || parts[4],
-                    'args': parts[5] ? parts[5].split(',') : [],
-                    'url': parts[6]
+                    'args': parts[5] ? parts[5].split(',') : []
                 };
+            }
 
+            if (element) {
                 if (!element.func && element.line) {
                     element.func = guessFunctionName(element.url, element.line);
                 }
@@ -708,7 +821,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
                 }
 
                 if (!element.context) {
-                    element.context = [lines[i + 1]];
+                    element.context = [lines[line + 1]];
                 }
 
                 stack.push(element);
@@ -723,9 +836,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             'mode': 'stacktrace',
             'name': ex.name,
             'message': ex.message,
-            'url': document.location.href,
-            'stack': stack,
-            'useragent': navigator.userAgent
+            'stack': stack
         };
     }
 
@@ -736,9 +847,11 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * Opera 9 and earlier use this method if the option to show stack
      * traces is turned on in opera:config.
      * @param {Error} ex
-     * @return {?Object.<string, *>} Stack information.
+     * @return {?TraceKit.StackTrace} Stack information.
+     * @memberof TraceKit.computeStackTrace
      */
     function computeStackTraceFromOperaMultiLineMessage(ex) {
+        // TODO: Clean this function up
         // Opera includes a stack trace into the exception message. An example is:
         //
         // Statement on line 3: Undefined variable: undefinedFunc
@@ -758,40 +871,42 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             return null;
         }
 
-        var lineRE1 = /^\s*Line (\d+) of linked script ((?:file|http|https)\S+)(?:: in function (\S+))?\s*$/i,
-            lineRE2 = /^\s*Line (\d+) of inline#(\d+) script in ((?:file|http|https)\S+)(?:: in function (\S+))?\s*$/i,
+        var lineRE1 = /^\s*Line (\d+) of linked script ((?:file|https?|blob)\S+)(?:: in function (\S+))?\s*$/i,
+            lineRE2 = /^\s*Line (\d+) of inline#(\d+) script in ((?:file|https?|blob)\S+)(?:: in function (\S+))?\s*$/i,
             lineRE3 = /^\s*Line (\d+) of function script\s*$/i,
             stack = [],
             scripts = document.getElementsByTagName('script'),
             inlineScriptBlocks = [],
-            parts,
-            i,
-            len,
-            source;
+            parts;
 
-        for (i in scripts) {
-            if (_has(scripts, i) && !scripts[i].src) {
-                inlineScriptBlocks.push(scripts[i]);
+        for (var s in scripts) {
+            if (_has(scripts, s) && !scripts[s].src) {
+                inlineScriptBlocks.push(scripts[s]);
             }
         }
 
-        for (i = 2, len = lines.length; i < len; i += 2) {
+        for (var line = 2; line < lines.length; line += 2) {
             var item = null;
-            if ((parts = lineRE1.exec(lines[i]))) {
+            if ((parts = lineRE1.exec(lines[line]))) {
                 item = {
                     'url': parts[2],
                     'func': parts[3],
-                    'line': +parts[1]
+                    'args': [],
+                    'line': +parts[1],
+                    'column': null
                 };
-            } else if ((parts = lineRE2.exec(lines[i]))) {
+            } else if ((parts = lineRE2.exec(lines[line]))) {
                 item = {
                     'url': parts[3],
-                    'func': parts[4]
+                    'func': parts[4],
+                    'args': [],
+                    'line': +parts[1],
+                    'column': null // TODO: Check to see if inline#1 (+parts[2]) points to the script number or column number.
                 };
                 var relativeLine = (+parts[1]); // relative to the start of the <SCRIPT> block
                 var script = inlineScriptBlocks[parts[2] - 1];
                 if (script) {
-                    source = getSource(item.url);
+                    var source = getSource(item.url);
                     if (source) {
                         source = source.join('\n');
                         var pos = source.indexOf(script.innerText);
@@ -800,15 +915,16 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
                         }
                     }
                 }
-            } else if ((parts = lineRE3.exec(lines[i]))) {
-                var url = window.location.href.replace(/#.*$/, ''),
-                    line = parts[1];
-                var re = new RegExp(escapeCodeAsRegExpForMatchingInsideHTML(lines[i + 1]));
-                source = findSourceInUrls(re, [url]);
+            } else if ((parts = lineRE3.exec(lines[line]))) {
+                var url = window.location.href.replace(/#.*$/, '');
+                var re = new RegExp(escapeCodeAsRegExpForMatchingInsideHTML(lines[line + 1]));
+                var src = findSourceInUrls(re, [url]);
                 item = {
                     'url': url,
-                    'line': source ? source.line : line,
-                    'func': ''
+                    'func': '',
+                    'args': [],
+                    'line': src ? src.line : parts[1],
+                    'column': null
                 };
             }
 
@@ -818,11 +934,11 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
                 }
                 var context = gatherContext(item.url, item.line);
                 var midline = (context ? context[Math.floor(context.length / 2)] : null);
-                if (context && midline.replace(/^\s*/, '') === lines[i + 1].replace(/^\s*/, '')) {
+                if (context && midline.replace(/^\s*/, '') === lines[line + 1].replace(/^\s*/, '')) {
                     item.context = context;
                 } else {
                     // if (context) alert("Context mismatch. Correct midline:\n" + lines[i+1] + "\n\nMidline:\n" + midline + "\n\nContext:\n" + context.join("\n") + "\n\nURL:\n" + item.url);
-                    item.context = [lines[i + 1]];
+                    item.context = [lines[line + 1]];
                 }
                 stack.push(item);
             }
@@ -835,16 +951,14 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             'mode': 'multiline',
             'name': ex.name,
             'message': lines[0],
-            'url': document.location.href,
-            'stack': stack,
-            'useragent': navigator.userAgent
+            'stack': stack
         };
     }
 
     /**
      * Adds information about the first frame to incomplete stack traces.
      * Safari and IE require this to get complete data on the first frame.
-     * @param {Object.<string, *>} stackInfo Stack trace information from
+     * @param {TraceKit.StackTrace} stackInfo Stack trace information from
      * one of the compute* methods.
      * @param {string} url The URL of the script that caused an error.
      * @param {(number|string)} lineNo The line number of the script that
@@ -853,6 +967,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * hopefully contains the name of the object that caused the error.
      * @return {boolean} Whether or not the stack information was
      * augmented.
+     * @memberof TraceKit.computeStackTrace
      */
     function augmentStackTraceWithInitialElement(stackInfo, url, lineNo, message) {
         var initial = {
@@ -905,7 +1020,8 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * Safari and IE. The top frame is restored by
      * {@link augmentStackTraceWithInitialElement}.
      * @param {Error} ex
-     * @return {?Object.<string, *>} Stack trace information.
+     * @return {TraceKit.StackTrace=} Stack trace information.
+     * @memberof TraceKit.computeStackTrace
      */
     function computeStackTraceByWalkingCallerChain(ex, depth) {
         var functionName = /function\s+([_$a-zA-Z\xA0-\uFFFF][_$a-zA-Z0-9\xA0-\uFFFF]*)?\s*\(/i,
@@ -925,6 +1041,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             item = {
                 'url': null,
                 'func': UNKNOWN_FUNCTION,
+                'args': [],
                 'line': null,
                 'column': null
             };
@@ -933,6 +1050,12 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
                 item.func = curr.name;
             } else if ((parts = functionName.exec(curr.toString()))) {
                 item.func = parts[1];
+            }
+
+            if (typeof item.func === 'undefined') {
+              try {
+                item.func = parts.input.substring(0, parts.input.indexOf('{'));
+              } catch (e) { }
             }
 
             if ((source = findSourceByFunctionBody(curr))) {
@@ -968,9 +1091,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             'mode': 'callers',
             'name': ex.name,
             'message': ex.message,
-            'url': document.location.href,
-            'stack': stack,
-            'useragent': navigator.userAgent
+            'stack': stack
         };
         augmentStackTraceWithInitialElement(result, ex.sourceURL || ex.fileName, ex.line || ex.lineNumber, ex.message || ex.description);
         return result;
@@ -980,6 +1101,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
      * Computes a stack trace for an exception.
      * @param {Error} ex
      * @param {(string|number)=} depth
+     * @memberof TraceKit.computeStackTrace
      */
     function computeStackTrace(ex, depth) {
         var stack = null;
@@ -1040,7 +1162,8 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
     /**
      * Logs a stacktrace starting from the previous call and working down.
      * @param {(number|string)=} depth How many frames deep to trace.
-     * @return {Object.<string, *>} Stack trace information.
+     * @return {TraceKit.StackTrace} Stack trace information.
+     * @memberof TraceKit.computeStackTrace
      */
     function computeStackTraceOfCaller(depth) {
         depth = (depth == null ? 0 : +depth) + 1; // "+ 1" because "ofCaller" should drop one frame
@@ -1049,14 +1172,13 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
         } catch (ex) {
             return computeStackTrace(ex, depth + 1);
         }
-
-        return null;
     }
 
     computeStackTrace.augmentStackTraceWithInitialElement = augmentStackTraceWithInitialElement;
     computeStackTrace.guessFunctionName = guessFunctionName;
     computeStackTrace.gatherContext = gatherContext;
     computeStackTrace.ofCaller = computeStackTraceOfCaller;
+    computeStackTrace.getSource = getSource;
 
     return computeStackTrace;
 }());
@@ -1064,8 +1186,9 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
 /**
  * Extends support for global error handling for asynchronous browser
  * functions. Adopted from Closure Library's errorhandler.js
+ * @memberof TraceKit
  */
-(function extendToAsynchronousCallbacks() {
+TraceKit.extendToAsynchronousCallbacks = function () {
     var _helper = function _helper(fnName) {
         var originalFn = window[fnName];
         window[fnName] = function traceKitAsyncExtension() {
@@ -1088,68 +1211,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
 
     _helper('setTimeout');
     _helper('setInterval');
-}());
-
-/**
- * Extended support for backtraces and global error handling for most
- * asynchronous jQuery functions.
- */
-(function traceKitAsyncForjQuery($) {
-
-    // quit if jQuery isn't on the page
-    if (!$) {
-        return;
-    }
-
-    var _oldEventAdd = $.event.add;
-    $.event.add = function traceKitEventAdd(elem, types, handler, data, selector) {
-        var _handler;
-
-        if (handler.handler) {
-            _handler = handler.handler;
-            handler.handler = TraceKit.wrap(handler.handler);
-        } else {
-            _handler = handler;
-            handler = TraceKit.wrap(handler);
-        }
-
-        // If the handler we are attaching doesn’t have the same guid as
-        // the original, it will never be removed when someone tries to
-        // unbind the original function later. Technically as a result of
-        // this our guids are no longer globally unique, but whatever, that
-        // never hurt anybody RIGHT?!
-        if (_handler.guid) {
-            handler.guid = _handler.guid;
-        } else {
-            handler.guid = _handler.guid = $.guid++;
-        }
-
-        return _oldEventAdd.call(this, elem, types, handler, data, selector);
-    };
-
-    var _oldReady = $.fn.ready;
-    $.fn.ready = function traceKitjQueryReadyWrapper(fn) {
-        return _oldReady.call(this, TraceKit.wrap(fn));
-    };
-
-    var _oldAjax = $.ajax;
-    $.ajax = function traceKitAjaxWrapper(s) {
-        var keys = ['complete', 'error', 'success'], key;
-        while(key = keys.pop()) {
-            if ($.isFunction(s[key])) {
-                s[key] = TraceKit.wrap(s[key]);
-            }
-        }
-
-        try {
-            return _oldAjax.call(this, s);
-        } catch (e) {
-            TraceKit.report(e);
-            throw e;
-        }
-    };
-
-}(window.jQuery));
+};
 
 //Default options:
 if (!TraceKit.remoteFetching) {
@@ -1168,4 +1230,4 @@ if (!TraceKit.linesOfContext || TraceKit.linesOfContext < 1) {
 // Export to global object
 window.TraceKit = TraceKit;
 
-}(window));
+}(typeof window !== 'undefined' ? window : global));
