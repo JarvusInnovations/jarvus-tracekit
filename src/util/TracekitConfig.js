@@ -1,3 +1,4 @@
+/*jslint browser: true, undef: true, white: true, laxbreak: true *//*global Ext*/
 /**
  * Utility for configuring Tracekit
  *
@@ -37,7 +38,6 @@ Ext.define('Jarvus.util.TracekitConfig', {
         {
             console.warn('TraceKit library was not found.  Tracekit was not configured.');
         }
-
     },
 
     sendReport: function(errorReport)
@@ -49,8 +49,6 @@ Ext.define('Jarvus.util.TracekitConfig', {
             params: {
                 app_name: me.getAppName(),
                 error: JSON.stringify(errorReport)
-            },
-            success: function(response){
             }
         });
     }
