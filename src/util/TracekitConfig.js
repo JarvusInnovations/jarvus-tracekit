@@ -44,13 +44,22 @@ Ext.define('Jarvus.util.TracekitConfig', {
     {
         var me = this;
 
-        Ext.Ajax.request({
-            url: me.getUrl(),
-            params: {
-                app_name: me.getAppName(),
-                error: JSON.stringify(errorReport)
-            }
-        });
+        if (errorReport) {
+            Ext.Ajax.request({
+                url: me.getUrl(),
+                headers: {
+                    'Accept': 'application/json'
+                },
+                params: {
+                    ApplicationName: me.getAppName(),
+                    ErrorUrl: window.location.href,
+                    ErrorName: errorReport.name,
+                    ErrorMode: errorReport.mode,
+                    ErrorMessage: errorReport.message,
+                    Stacks: JSON.stringify(errorReport.stack)
+                }
+            });
+        }
     }
 
 });
